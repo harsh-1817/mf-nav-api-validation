@@ -1,5 +1,7 @@
 # Mutual Fund NAV API: Test & Data-Validation Framework
 
+![tests](https://github.com/harsh-1817/mf-nav-api-validation/actions/workflows/tests.yml/badge.svg)
+
 An automated QA framework for the public [MFapi.in](https://www.mfapi.in) mutual fund API. It combines **Postman/Newman** API tests with a **Python** data-validation engine that checks whether the NAV (Net Asset Value) time series coming out of the API can be trusted for portfolio valuation, returns and reporting.
 
 **The question:** *If a broker app consumed this API, what could go wrong, and would we catch it before a customer saw a wrong number?*
@@ -13,8 +15,7 @@ An automated QA framework for the public [MFapi.in](https://www.mfapi.in) mutual
 - **Cross-endpoint consistency test:** `/latest` must agree with the newest record of the NAV history.
 - **JSON-schema contract tests** that fail if the API changes a field name or type.
 - **Negative and security tests** (unknown IDs, SQL-injection and XSS style input, information leakage).
-- **Three real defects found in live data** (see Findings), including an API that reports unknown funds as successful.
-- **A real API defect found and documented:** unknown scheme codes return HTTP 200 with `status: "SUCCESS"` (see Findings). It is tracked as a *known issue* that is reported on every run without failing CI.
+- **Three real defects found in live data:** an API that reports unknown funds as successful (tracked as a *known issue* that is reported on every run without failing CI), a single bad NAV record, and a 100x break in a fund's history (see Findings).
 - **20 offline unit tests** proving each check catches the defect it was written for, including regression tests built from real defects found in live data.
 - **HTML, CSV and Excel reports** with pass/fail, response-time percentiles and examples of every data issue.
 - **CI-ready:** exit code `1` on failures, GitHub Actions workflow included.
@@ -83,7 +84,7 @@ mf-nav-api-validation/
 **Requirements:** Python 3.9+. Node.js is optional (only needed for Newman).
 
 ```bash
-git clone https://github.com/<your-username>/mf-nav-api-validation.git
+git clone https://github.com/harsh-1817/mf-nav-api-validation.git
 cd mf-nav-api-validation
 pip install -r requirements.txt
 ```
@@ -113,7 +114,8 @@ newman run postman/MFapi_Test_Suite.postman_collection.json -e postman/MFapi_Pro
 ```
 
 ## Findings from a live run (22 Oct 2026)
-**Scope:** 11 distinct schemes across two runs (large, small and flexi-cap equity, liquid and overnight debt, index funds, a US-equity fund), about 140 API tests per run plus the data checks on each scheme's full NAV history (up to 13 years).
+**Scope:** 11 distinct schemes across two runs (large, small and flexi-cap equity, liquid and overnight debt, index funds, a US-equity fund). The default 4-scheme run executes 81 API tests, plus 56 Postman assertions, alongside the data checks on each scheme's full NAV history (up to 13 years).
+
 
 | # | Finding | Detail |
 |---|---|---|
@@ -146,6 +148,9 @@ newman run postman/MFapi_Test_Suite.postman_collection.json -e postman/MFapi_Pro
 Per-category thresholds, comparison against a second NAV source, scheduled monitoring with alerts, response-time trend tracking, load testing with k6 or Locust.
 
 ## Author
-**Harsh Trivedi**, NISM Series XV certified Research Analyst
+
+**Harsh Trivedi**  
+**MBA (Computer Management) | Data Analytics & Financial Markets**
+
+**Certifications:** NISM Research Analyst (Series XV) · NISM Equity Derivatives (Series VIII)
 Skills shown: API testing (Postman, Newman) - Python (pandas, pytest, jsonschema) - data validation - QA strategy - financial data
-<!-- TODO: add [LinkedIn](https://linkedin.com/in/...) | [Portfolio](https://...) -->

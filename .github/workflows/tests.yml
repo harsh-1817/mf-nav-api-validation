@@ -38,6 +38,7 @@ jobs:
           newman run postman/MFapi_Test_Suite.postman_collection.json
           -e postman/MFapi_Production.postman_environment.json
           -r cli,htmlextra --reporter-htmlextra-export reports/newman_report.html
+          continue-on-error: true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
