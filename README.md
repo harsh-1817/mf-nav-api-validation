@@ -1,3 +1,5 @@
+> Evolved from [v1 (fin-api-validation)](https://github.com/harsh-1817/fin-api-validation), with real defect findings and CI.
+
 # Mutual Fund NAV API: Test & Data-Validation Framework
 
 ![tests](https://github.com/harsh-1817/mf-nav-api-validation/actions/workflows/tests.yml/badge.svg)
