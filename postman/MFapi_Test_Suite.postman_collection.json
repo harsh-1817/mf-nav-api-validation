@@ -1,0 +1,868 @@
+{
+  "info": {
+    "name": "MFapi.in - API Test Suite",
+    "description": "Functional, contract, data-quality, cross-endpoint and negative tests for the public MFapi.in mutual fund API. Run the folders in order (the NAV history request stores values used by later requests).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://api.mfapi.in"
+    },
+    {
+      "key": "scheme_code",
+      "value": "125497"
+    },
+    {
+      "key": "search_query",
+      "value": "HDFC"
+    },
+    {
+      "key": "start_date",
+      "value": "2024-01-01"
+    },
+    {
+      "key": "end_date",
+      "value": "2024-06-30"
+    },
+    {
+      "key": "sla_ms",
+      "value": "3000"
+    },
+    {
+      "key": "max_daily_change_pct",
+      "value": "10"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Search",
+      "item": [
+        {
+          "name": "Search schemes by name",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const SLA = Number(pm.variables.get('sla_ms')) || 3000;",
+                  "const navSeries = j => j.data.filter(r => parseDate(r.date) && Number(r.nav) > 0).map(r => ({ t: parseDate(r.date).getTime(), n: Number(r.nav), d: r.date })).sort((a, b) => a.t - b.t);",
+                  "const spikePositions = s => { const hits = []; for (let i = 1; i < s.length - 1; i++) { const a = s[i].n / s[i - 1].n - 1, b = s[i + 1].n / s[i].n - 1, net = s[i + 1].n / s[i - 1].n - 1; if (Math.abs(a) >= 0.10 && Math.abs(b) >= 0.10 && a * b < 0 && Math.abs(net) <= 0.2 * Math.abs(a)) hits.push(i); } return hits; };",
+                  "const isJson = () => (pm.response.headers.get('Content-Type') || '').toLowerCase().includes('application/json');",
+                  "const body = () => { try { return pm.response.json(); } catch (e) { return null; } };",
+                  "const parseDate = s => {",
+                  "  const m = /^(\\d{2})-(\\d{2})-(\\d{4})$/.exec(s || '');",
+                  "  if (!m) return null;",
+                  "  const d = new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));",
+                  "  return d.getUTCMonth() === (+m[2] - 1) ? d : null;",
+                  "};",
+                  "const isSuccessPayload = () => { const j = body(); return pm.response.code === 200 && j && !Array.isArray(j) && j.status === 'SUCCESS' && Array.isArray(j.data) && j.data.length > 0; };",
+                  "const NAV_RECORD = { type: 'object', required: ['date', 'nav'], properties: { date: { type: 'string', pattern: '^\\\\d{2}-\\\\d{2}-\\\\d{4}$' }, nav: { type: 'string', pattern: '^-?\\\\d+(\\\\.\\\\d+)?$' } } };",
+                  "const SCHEME_SCHEMA = { type: 'object', required: ['meta', 'data', 'status'], properties: {",
+                  "  meta: { type: 'object', required: ['fund_house', 'scheme_code', 'scheme_name'], properties: {",
+                  "    fund_house: { type: 'string', minLength: 1 }, scheme_type: { type: ['string', 'null'] }, scheme_category: { type: ['string', 'null'] },",
+                  "    scheme_code: { type: ['integer', 'string'] }, scheme_name: { type: 'string', minLength: 1 },",
+                  "    isin_growth: { type: ['string', 'null'] }, isin_div_reinvestment: { type: ['string', 'null'] } } },",
+                  "  data: { type: 'array', items: NAV_RECORD }, status: { type: 'string', enum: ['SUCCESS'] } } };",
+                  "const SEARCH_SCHEMA = { type: 'array', items: { type: 'object', required: ['schemeCode', 'schemeName'], properties: { schemeCode: { type: 'integer' }, schemeName: { type: 'string', minLength: 1 } } } };",
+                  "",
+                  "pm.test('PM-S01 status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('PM-S02 response time is within SLA', () => pm.expect(pm.response.responseTime).to.be.below(SLA));",
+                  "pm.test('PM-S03 Content-Type is application/json', () => pm.expect(isJson()).to.be.true);",
+                  "pm.test('PM-S04 body matches JSON schema', () => pm.response.to.have.jsonSchema(SEARCH_SCHEMA));",
+                  "pm.test('PM-S05 returns at least one result', () => pm.expect(body()).to.be.an('array').that.is.not.empty);",
+                  "pm.test('PM-S06 no duplicate scheme codes', () => { const c = body().map(r => r.schemeCode); pm.expect(new Set(c).size).to.equal(c.length); });",
+                  "pm.test('PM-S07 results are relevant to the query', () => {",
+                  "  const word = String(pm.variables.get('search_query')).toLowerCase().split(' ')[0];",
+                  "  const off = body().filter(r => !String(r.schemeName).toLowerCase().includes(word));",
+                  "  pm.expect(off.length, 'irrelevant results: ' + off.slice(0, 3).map(r => r.schemeName).join(' | ')).to.equal(0);",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mf/search?q={{search_query}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mf",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "{{search_query}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 NAV history",
+      "item": [
+        {
+          "name": "Get NAV history for a scheme",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const SLA = Number(pm.variables.get('sla_ms')) || 3000;",
+                  "const navSeries = j => j.data.filter(r => parseDate(r.date) && Number(r.nav) > 0).map(r => ({ t: parseDate(r.date).getTime(), n: Number(r.nav), d: r.date })).sort((a, b) => a.t - b.t);",
+                  "const spikePositions = s => { const hits = []; for (let i = 1; i < s.length - 1; i++) { const a = s[i].n / s[i - 1].n - 1, b = s[i + 1].n / s[i].n - 1, net = s[i + 1].n / s[i - 1].n - 1; if (Math.abs(a) >= 0.10 && Math.abs(b) >= 0.10 && a * b < 0 && Math.abs(net) <= 0.2 * Math.abs(a)) hits.push(i); } return hits; };",
+                  "const isJson = () => (pm.response.headers.get('Content-Type') || '').toLowerCase().includes('application/json');",
+                  "const body = () => { try { return pm.response.json(); } catch (e) { return null; } };",
+                  "const parseDate = s => {",
+                  "  const m = /^(\\d{2})-(\\d{2})-(\\d{4})$/.exec(s || '');",
+                  "  if (!m) return null;",
+                  "  const d = new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));",
+                  "  return d.getUTCMonth() === (+m[2] - 1) ? d : null;",
+                  "};",
+                  "const isSuccessPayload = () => { const j = body(); return pm.response.code === 200 && j && !Array.isArray(j) && j.status === 'SUCCESS' && Array.isArray(j.data) && j.data.length > 0; };",
+                  "const NAV_RECORD = { type: 'object', required: ['date', 'nav'], properties: { date: { type: 'string', pattern: '^\\\\d{2}-\\\\d{2}-\\\\d{4}$' }, nav: { type: 'string', pattern: '^-?\\\\d+(\\\\.\\\\d+)?$' } } };",
+                  "const SCHEME_SCHEMA = { type: 'object', required: ['meta', 'data', 'status'], properties: {",
+                  "  meta: { type: 'object', required: ['fund_house', 'scheme_code', 'scheme_name'], properties: {",
+                  "    fund_house: { type: 'string', minLength: 1 }, scheme_type: { type: ['string', 'null'] }, scheme_category: { type: ['string', 'null'] },",
+                  "    scheme_code: { type: ['integer', 'string'] }, scheme_name: { type: 'string', minLength: 1 },",
+                  "    isin_growth: { type: ['string', 'null'] }, isin_div_reinvestment: { type: ['string', 'null'] } } },",
+                  "  data: { type: 'array', items: NAV_RECORD }, status: { type: 'string', enum: ['SUCCESS'] } } };",
+                  "const SEARCH_SCHEMA = { type: 'array', items: { type: 'object', required: ['schemeCode', 'schemeName'], properties: { schemeCode: { type: 'integer' }, schemeName: { type: 'string', minLength: 1 } } } };",
+                  "",
+                  "const j = body();",
+                  "pm.test('PM-H01 status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('PM-H02 response time is within SLA', () => pm.expect(pm.response.responseTime).to.be.below(SLA));",
+                  "pm.test('PM-H03 Content-Type is application/json', () => pm.expect(isJson()).to.be.true);",
+                  "pm.test('PM-H04 body matches JSON schema', () => pm.response.to.have.jsonSchema(SCHEME_SCHEMA));",
+                  "pm.test('PM-H05 meta.scheme_code equals requested scheme', () => pm.expect(String(j.meta.scheme_code)).to.equal(String(pm.variables.get('scheme_code'))));",
+                  "pm.test('PM-H06 status field is SUCCESS', () => pm.expect(j.status).to.equal('SUCCESS'));",
+                  "pm.test('PM-H07 data array is not empty', () => pm.expect(j.data).to.be.an('array').that.is.not.empty);",
+                  "pm.test('PM-H08 fund house and scheme name are present', () => { pm.expect(j.meta.fund_house).to.be.a('string').and.not.empty; pm.expect(j.meta.scheme_name).to.be.a('string').and.not.empty; });",
+                  "pm.test('PM-H09 every date is a valid dd-mm-yyyy calendar date', () => { const bad = j.data.filter(r => !parseDate(r.date)); pm.expect(bad.length, 'bad dates: ' + bad.slice(0, 3).map(r => r.date)).to.equal(0); });",
+                  "pm.test('PM-H10 no NAV is dated in the future', () => { const now = Date.now(); const f = j.data.filter(r => { const d = parseDate(r.date); return d && d.getTime() > now; }); pm.expect(f.length, 'future: ' + f.slice(0, 3).map(r => r.date)).to.equal(0); });",
+                  "pm.test('PM-H11 every NAV is a number greater than zero', () => { const bad = j.data.filter(r => !(Number(r.nav) > 0)); pm.expect(bad.length, 'bad NAVs: ' + bad.slice(0, 3).map(r => r.date + '=' + r.nav)).to.equal(0); });",
+                  "pm.test('PM-H12 no duplicate dates', () => { const d = j.data.map(r => r.date); pm.expect(d.length - new Set(d).size, 'duplicates').to.equal(0); });",
+                  "pm.test('PM-H13 records are in consistent date order', () => {",
+                  "  const t = j.data.map(r => parseDate(r.date)).filter(Boolean).map(d => d.getTime());",
+                  "  const desc = t.every((v, i) => i === 0 || t[i - 1] >= v), asc = t.every((v, i) => i === 0 || t[i - 1] <= v);",
+                  "  pm.expect(desc || asc, 'dates are not monotonic').to.be.true;",
+                  "});",
+                  "pm.test('PM-H14 no one-day NAV move above the threshold', () => {",
+                  "  const limit = Number(pm.variables.get('max_daily_change_pct')) || 10;",
+                  "  const s = j.data.filter(r => parseDate(r.date) && Number(r.nav) > 0).map(r => ({ t: parseDate(r.date).getTime(), n: Number(r.nav), d: r.date })).sort((a, b) => a.t - b.t);",
+                  "  const big = []; for (let i = 1; i < s.length; i++) { const c = Math.abs(s[i].n / s[i - 1].n - 1) * 100; if (c > limit) big.push(s[i].d + ' ' + c.toFixed(1) + '%'); }",
+                  "  pm.expect(big.length, 'moves above ' + limit + '%: ' + big.slice(0, 3).join(', ')).to.equal(0);",
+                  "});",
+                  "pm.test('PM-H15 no single-record NAV spike that reverts the next day', () => {",
+                  "  const s = navSeries(j), hits = spikePositions(s);",
+                  "  pm.expect(hits.length, 'spikes: ' + hits.slice(0, 3).map(i => s[i].d + '=' + s[i].n).join(', ')).to.equal(0);",
+                  "});",
+                  "pm.test('PM-H16 no implausible one-day jump (break in the series)', () => {",
+                  "  const s = navSeries(j), spikes = spikePositions(s), covered = new Set(spikes.concat(spikes.map(i => i + 1)));",
+                  "  const bad = []; for (let i = 1; i < s.length; i++) { if (!covered.has(i) && Math.abs(s[i].n / s[i - 1].n - 1) >= 0.5) bad.push(s[i].d + ' x' + (s[i].n / s[i - 1].n).toFixed(2)); }",
+                  "  pm.expect(bad.length, 'series breaks: ' + bad.slice(0, 3).join(', ')).to.equal(0);",
+                  "});",
+                  "const dated = j && Array.isArray(j.data) ? j.data.filter(r => parseDate(r.date)).sort((a, b) => parseDate(b.date) - parseDate(a.date)) : [];",
+                  "if (dated.length) {",
+                  "  pm.collectionVariables.set('hist_latest_date', dated[0].date);",
+                  "  pm.collectionVariables.set('hist_latest_nav', dated[0].nav);",
+                  "  pm.collectionVariables.set('hist_count', String(j.data.length));",
+                  "}",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mf/{{scheme_code}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mf",
+                "{{scheme_code}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get NAV history with date range",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const SLA = Number(pm.variables.get('sla_ms')) || 3000;",
+                  "const navSeries = j => j.data.filter(r => parseDate(r.date) && Number(r.nav) > 0).map(r => ({ t: parseDate(r.date).getTime(), n: Number(r.nav), d: r.date })).sort((a, b) => a.t - b.t);",
+                  "const spikePositions = s => { const hits = []; for (let i = 1; i < s.length - 1; i++) { const a = s[i].n / s[i - 1].n - 1, b = s[i + 1].n / s[i].n - 1, net = s[i + 1].n / s[i - 1].n - 1; if (Math.abs(a) >= 0.10 && Math.abs(b) >= 0.10 && a * b < 0 && Math.abs(net) <= 0.2 * Math.abs(a)) hits.push(i); } return hits; };",
+                  "const isJson = () => (pm.response.headers.get('Content-Type') || '').toLowerCase().includes('application/json');",
+                  "const body = () => { try { return pm.response.json(); } catch (e) { return null; } };",
+                  "const parseDate = s => {",
+                  "  const m = /^(\\d{2})-(\\d{2})-(\\d{4})$/.exec(s || '');",
+                  "  if (!m) return null;",
+                  "  const d = new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));",
+                  "  return d.getUTCMonth() === (+m[2] - 1) ? d : null;",
+                  "};",
+                  "const isSuccessPayload = () => { const j = body(); return pm.response.code === 200 && j && !Array.isArray(j) && j.status === 'SUCCESS' && Array.isArray(j.data) && j.data.length > 0; };",
+                  "const NAV_RECORD = { type: 'object', required: ['date', 'nav'], properties: { date: { type: 'string', pattern: '^\\\\d{2}-\\\\d{2}-\\\\d{4}$' }, nav: { type: 'string', pattern: '^-?\\\\d+(\\\\.\\\\d+)?$' } } };",
+                  "const SCHEME_SCHEMA = { type: 'object', required: ['meta', 'data', 'status'], properties: {",
+                  "  meta: { type: 'object', required: ['fund_house', 'scheme_code', 'scheme_name'], properties: {",
+                  "    fund_house: { type: 'string', minLength: 1 }, scheme_type: { type: ['string', 'null'] }, scheme_category: { type: ['string', 'null'] },",
+                  "    scheme_code: { type: ['integer', 'string'] }, scheme_name: { type: 'string', minLength: 1 },",
+                  "    isin_growth: { type: ['string', 'null'] }, isin_div_reinvestment: { type: ['string', 'null'] } } },",
+                  "  data: { type: 'array', items: NAV_RECORD }, status: { type: 'string', enum: ['SUCCESS'] } } };",
+                  "const SEARCH_SCHEMA = { type: 'array', items: { type: 'object', required: ['schemeCode', 'schemeName'], properties: { schemeCode: { type: 'integer' }, schemeName: { type: 'string', minLength: 1 } } } };",
+                  "",
+                  "const j = body();",
+                  "pm.test('PM-R01 status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('PM-R02 response time is within SLA', () => pm.expect(pm.response.responseTime).to.be.below(SLA));",
+                  "pm.test('PM-R03 filtered data is not empty', () => pm.expect(j.data).to.be.an('array').that.is.not.empty);",
+                  "pm.test('PM-R04 every returned date lies inside startDate..endDate', () => {",
+                  "  const s = new Date(pm.variables.get('start_date') + 'T00:00:00Z').getTime(), e = new Date(pm.variables.get('end_date') + 'T23:59:59Z').getTime();",
+                  "  const out = j.data.filter(r => { const d = parseDate(r.date); return !d || d.getTime() < s || d.getTime() > e; });",
+                  "  pm.expect(out.length, 'outside range: ' + out.slice(0, 3).map(r => r.date)).to.equal(0);",
+                  "});",
+                  "pm.test('PM-R05 filtered result is smaller than the full history', () => {",
+                  "  const full = Number(pm.collectionVariables.get('hist_count'));",
+                  "  if (!full) { pm.expect.fail('run the \"Get NAV history\" request first'); }",
+                  "  pm.expect(j.data.length).to.be.below(full);",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mf/{{scheme_code}}?startDate={{start_date}}&endDate={{end_date}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mf",
+                "{{scheme_code}}"
+              ],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "{{start_date}}"
+                },
+                {
+                  "key": "endDate",
+                  "value": "{{end_date}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Latest NAV",
+      "item": [
+        {
+          "name": "Get latest NAV for a scheme",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const SLA = Number(pm.variables.get('sla_ms')) || 3000;",
+                  "const navSeries = j => j.data.filter(r => parseDate(r.date) && Number(r.nav) > 0).map(r => ({ t: parseDate(r.date).getTime(), n: Number(r.nav), d: r.date })).sort((a, b) => a.t - b.t);",
+                  "const spikePositions = s => { const hits = []; for (let i = 1; i < s.length - 1; i++) { const a = s[i].n / s[i - 1].n - 1, b = s[i + 1].n / s[i].n - 1, net = s[i + 1].n / s[i - 1].n - 1; if (Math.abs(a) >= 0.10 && Math.abs(b) >= 0.10 && a * b < 0 && Math.abs(net) <= 0.2 * Math.abs(a)) hits.push(i); } return hits; };",
+                  "const isJson = () => (pm.response.headers.get('Content-Type') || '').toLowerCase().includes('application/json');",
+                  "const body = () => { try { return pm.response.json(); } catch (e) { return null; } };",
+                  "const parseDate = s => {",
+                  "  const m = /^(\\d{2})-(\\d{2})-(\\d{4})$/.exec(s || '');",
+                  "  if (!m) return null;",
+                  "  const d = new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));",
+                  "  return d.getUTCMonth() === (+m[2] - 1) ? d : null;",
+                  "};",
+                  "const isSuccessPayload = () => { const j = body(); return pm.response.code === 200 && j && !Array.isArray(j) && j.status === 'SUCCESS' && Array.isArray(j.data) && j.data.length > 0; };",
+                  "const NAV_RECORD = { type: 'object', required: ['date', 'nav'], properties: { date: { type: 'string', pattern: '^\\\\d{2}-\\\\d{2}-\\\\d{4}$' }, nav: { type: 'string', pattern: '^-?\\\\d+(\\\\.\\\\d+)?$' } } };",
+                  "const SCHEME_SCHEMA = { type: 'object', required: ['meta', 'data', 'status'], properties: {",
+                  "  meta: { type: 'object', required: ['fund_house', 'scheme_code', 'scheme_name'], properties: {",
+                  "    fund_house: { type: 'string', minLength: 1 }, scheme_type: { type: ['string', 'null'] }, scheme_category: { type: ['string', 'null'] },",
+                  "    scheme_code: { type: ['integer', 'string'] }, scheme_name: { type: 'string', minLength: 1 },",
+                  "    isin_growth: { type: ['string', 'null'] }, isin_div_reinvestment: { type: ['string', 'null'] } } },",
+                  "  data: { type: 'array', items: NAV_RECORD }, status: { type: 'string', enum: ['SUCCESS'] } } };",
+                  "const SEARCH_SCHEMA = { type: 'array', items: { type: 'object', required: ['schemeCode', 'schemeName'], properties: { schemeCode: { type: 'integer' }, schemeName: { type: 'string', minLength: 1 } } } };",
+                  "",
+                  "const j = body();",
+                  "pm.test('PM-L01 status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('PM-L02 response time is within SLA', () => pm.expect(pm.response.responseTime).to.be.below(SLA));",
+                  "pm.test('PM-L03 body matches JSON schema', () => pm.response.to.have.jsonSchema(SCHEME_SCHEMA));",
+                  "pm.test('PM-L04 returns exactly one record', () => pm.expect(j.data).to.have.lengthOf(1));",
+                  "pm.test('PM-L05 NAV is a number greater than zero', () => pm.expect(Number(j.data[0].nav)).to.be.above(0));",
+                  "pm.test('PM-L06 date is valid and not in the future', () => { const d = parseDate(j.data[0].date); pm.expect(d, 'invalid date').to.not.be.null; pm.expect(d.getTime()).to.be.at.most(Date.now()); });",
+                  "pm.test('PM-L07 meta.scheme_code equals requested scheme', () => pm.expect(String(j.meta.scheme_code)).to.equal(String(pm.variables.get('scheme_code'))));",
+                  "pm.test('PM-L08 /latest is not older than the newest history record', () => {",
+                  "  const h = parseDate(pm.collectionVariables.get('hist_latest_date'));",
+                  "  if (!h) { pm.expect.fail('run the \"Get NAV history\" request first'); }",
+                  "  pm.expect(parseDate(j.data[0].date).getTime()).to.be.at.least(h.getTime());",
+                  "});",
+                  "pm.test('PM-L09 same-date NAV matches between /latest and history', () => {",
+                  "  if (j.data[0].date === pm.collectionVariables.get('hist_latest_date')) pm.expect(Number(j.data[0].nav)).to.equal(Number(pm.collectionVariables.get('hist_latest_nav')));",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mf/{{scheme_code}}/latest",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mf",
+                "{{scheme_code}}",
+                "latest"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 Scheme list and pagination",
+      "item": [
+        {
+          "name": "List schemes (page 1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const SLA = Number(pm.variables.get('sla_ms')) || 3000;",
+                  "const navSeries = j => j.data.filter(r => parseDate(r.date) && Number(r.nav) > 0).map(r => ({ t: parseDate(r.date).getTime(), n: Number(r.nav), d: r.date })).sort((a, b) => a.t - b.t);",
+                  "const spikePositions = s => { const hits = []; for (let i = 1; i < s.length - 1; i++) { const a = s[i].n / s[i - 1].n - 1, b = s[i + 1].n / s[i].n - 1, net = s[i + 1].n / s[i - 1].n - 1; if (Math.abs(a) >= 0.10 && Math.abs(b) >= 0.10 && a * b < 0 && Math.abs(net) <= 0.2 * Math.abs(a)) hits.push(i); } return hits; };",
+                  "const isJson = () => (pm.response.headers.get('Content-Type') || '').toLowerCase().includes('application/json');",
+                  "const body = () => { try { return pm.response.json(); } catch (e) { return null; } };",
+                  "const parseDate = s => {",
+                  "  const m = /^(\\d{2})-(\\d{2})-(\\d{4})$/.exec(s || '');",
+                  "  if (!m) return null;",
+                  "  const d = new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));",
+                  "  return d.getUTCMonth() === (+m[2] - 1) ? d : null;",
+                  "};",
+                  "const isSuccessPayload = () => { const j = body(); return pm.response.code === 200 && j && !Array.isArray(j) && j.status === 'SUCCESS' && Array.isArray(j.data) && j.data.length > 0; };",
+                  "const NAV_RECORD = { type: 'object', required: ['date', 'nav'], properties: { date: { type: 'string', pattern: '^\\\\d{2}-\\\\d{2}-\\\\d{4}$' }, nav: { type: 'string', pattern: '^-?\\\\d+(\\\\.\\\\d+)?$' } } };",
+                  "const SCHEME_SCHEMA = { type: 'object', required: ['meta', 'data', 'status'], properties: {",
+                  "  meta: { type: 'object', required: ['fund_house', 'scheme_code', 'scheme_name'], properties: {",
+                  "    fund_house: { type: 'string', minLength: 1 }, scheme_type: { type: ['string', 'null'] }, scheme_category: { type: ['string', 'null'] },",
+                  "    scheme_code: { type: ['integer', 'string'] }, scheme_name: { type: 'string', minLength: 1 },",
+                  "    isin_growth: { type: ['string', 'null'] }, isin_div_reinvestment: { type: ['string', 'null'] } } },",
+                  "  data: { type: 'array', items: NAV_RECORD }, status: { type: 'string', enum: ['SUCCESS'] } } };",
+                  "const SEARCH_SCHEMA = { type: 'array', items: { type: 'object', required: ['schemeCode', 'schemeName'], properties: { schemeCode: { type: 'integer' }, schemeName: { type: 'string', minLength: 1 } } } };",
+                  "",
+                  "const j = body();",
+                  "pm.test('PM-P01 status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('PM-P02 response is a non-empty array', () => pm.expect(j).to.be.an('array').that.is.not.empty);",
+                  "pm.test('PM-P03 limit=5 returns at most 5 rows', () => pm.expect(j.length).to.be.at.most(5));",
+                  "pm.test('PM-P04 every row has schemeCode and schemeName', () => pm.expect(j.every(r => Number.isInteger(r.schemeCode) && r.schemeName)).to.be.true);",
+                  "pm.collectionVariables.set('list_first_code', String(j && j[0] ? j[0].schemeCode : ''));",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mf?limit=5&offset=0",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mf"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "5"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List schemes (page 2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const SLA = Number(pm.variables.get('sla_ms')) || 3000;",
+                  "const navSeries = j => j.data.filter(r => parseDate(r.date) && Number(r.nav) > 0).map(r => ({ t: parseDate(r.date).getTime(), n: Number(r.nav), d: r.date })).sort((a, b) => a.t - b.t);",
+                  "const spikePositions = s => { const hits = []; for (let i = 1; i < s.length - 1; i++) { const a = s[i].n / s[i - 1].n - 1, b = s[i + 1].n / s[i].n - 1, net = s[i + 1].n / s[i - 1].n - 1; if (Math.abs(a) >= 0.10 && Math.abs(b) >= 0.10 && a * b < 0 && Math.abs(net) <= 0.2 * Math.abs(a)) hits.push(i); } return hits; };",
+                  "const isJson = () => (pm.response.headers.get('Content-Type') || '').toLowerCase().includes('application/json');",
+                  "const body = () => { try { return pm.response.json(); } catch (e) { return null; } };",
+                  "const parseDate = s => {",
+                  "  const m = /^(\\d{2})-(\\d{2})-(\\d{4})$/.exec(s || '');",
+                  "  if (!m) return null;",
+                  "  const d = new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));",
+                  "  return d.getUTCMonth() === (+m[2] - 1) ? d : null;",
+                  "};",
+                  "const isSuccessPayload = () => { const j = body(); return pm.response.code === 200 && j && !Array.isArray(j) && j.status === 'SUCCESS' && Array.isArray(j.data) && j.data.length > 0; };",
+                  "const NAV_RECORD = { type: 'object', required: ['date', 'nav'], properties: { date: { type: 'string', pattern: '^\\\\d{2}-\\\\d{2}-\\\\d{4}$' }, nav: { type: 'string', pattern: '^-?\\\\d+(\\\\.\\\\d+)?$' } } };",
+                  "const SCHEME_SCHEMA = { type: 'object', required: ['meta', 'data', 'status'], properties: {",
+                  "  meta: { type: 'object', required: ['fund_house', 'scheme_code', 'scheme_name'], properties: {",
+                  "    fund_house: { type: 'string', minLength: 1 }, scheme_type: { type: ['string', 'null'] }, scheme_category: { type: ['string', 'null'] },",
+                  "    scheme_code: { type: ['integer', 'string'] }, scheme_name: { type: 'string', minLength: 1 },",
+                  "    isin_growth: { type: ['string', 'null'] }, isin_div_reinvestment: { type: ['string', 'null'] } } },",
+                  "  data: { type: 'array', items: NAV_RECORD }, status: { type: 'string', enum: ['SUCCESS'] } } };",
+                  "const SEARCH_SCHEMA = { type: 'array', items: { type: 'object', required: ['schemeCode', 'schemeName'], properties: { schemeCode: { type: 'integer' }, schemeName: { type: 'string', minLength: 1 } } } };",
+                  "",
+                  "const j = body();",
+                  "pm.test('PM-P05 status code is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('PM-P06 offset returns different rows (pagination works)', () => pm.expect(String(j[0].schemeCode)).to.not.equal(pm.collectionVariables.get('list_first_code')));",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mf?limit=5&offset=5",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mf"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "5"
+                },
+                {
+                  "key": "offset",
+                  "value": "5"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Negative and security",
+      "item": [
+        {
+          "name": "Unknown scheme code",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const SLA = Number(pm.variables.get('sla_ms')) || 3000;",
+                  "const navSeries = j => j.data.filter(r => parseDate(r.date) && Number(r.nav) > 0).map(r => ({ t: parseDate(r.date).getTime(), n: Number(r.nav), d: r.date })).sort((a, b) => a.t - b.t);",
+                  "const spikePositions = s => { const hits = []; for (let i = 1; i < s.length - 1; i++) { const a = s[i].n / s[i - 1].n - 1, b = s[i + 1].n / s[i].n - 1, net = s[i + 1].n / s[i - 1].n - 1; if (Math.abs(a) >= 0.10 && Math.abs(b) >= 0.10 && a * b < 0 && Math.abs(net) <= 0.2 * Math.abs(a)) hits.push(i); } return hits; };",
+                  "const isJson = () => (pm.response.headers.get('Content-Type') || '').toLowerCase().includes('application/json');",
+                  "const body = () => { try { return pm.response.json(); } catch (e) { return null; } };",
+                  "const parseDate = s => {",
+                  "  const m = /^(\\d{2})-(\\d{2})-(\\d{4})$/.exec(s || '');",
+                  "  if (!m) return null;",
+                  "  const d = new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));",
+                  "  return d.getUTCMonth() === (+m[2] - 1) ? d : null;",
+                  "};",
+                  "const isSuccessPayload = () => { const j = body(); return pm.response.code === 200 && j && !Array.isArray(j) && j.status === 'SUCCESS' && Array.isArray(j.data) && j.data.length > 0; };",
+                  "const NAV_RECORD = { type: 'object', required: ['date', 'nav'], properties: { date: { type: 'string', pattern: '^\\\\d{2}-\\\\d{2}-\\\\d{4}$' }, nav: { type: 'string', pattern: '^-?\\\\d+(\\\\.\\\\d+)?$' } } };",
+                  "const SCHEME_SCHEMA = { type: 'object', required: ['meta', 'data', 'status'], properties: {",
+                  "  meta: { type: 'object', required: ['fund_house', 'scheme_code', 'scheme_name'], properties: {",
+                  "    fund_house: { type: 'string', minLength: 1 }, scheme_type: { type: ['string', 'null'] }, scheme_category: { type: ['string', 'null'] },",
+                  "    scheme_code: { type: ['integer', 'string'] }, scheme_name: { type: 'string', minLength: 1 },",
+                  "    isin_growth: { type: ['string', 'null'] }, isin_div_reinvestment: { type: ['string', 'null'] } } },",
+                  "  data: { type: 'array', items: NAV_RECORD }, status: { type: 'string', enum: ['SUCCESS'] } } };",
+                  "const SEARCH_SCHEMA = { type: 'array', items: { type: 'object', required: ['schemeCode', 'schemeName'], properties: { schemeCode: { type: 'integer' }, schemeName: { type: 'string', minLength: 1 } } } };",
+                  "",
+                  "pm.test('PM-N01 unknown scheme is not returned as a success payload', () => pm.expect(isSuccessPayload()).to.be.false);",
+                  "pm.test('PM-N02 unknown scheme does not cause a 5xx error', () => pm.expect(pm.response.code).to.be.below(500));",
+                  "pm.test('PM-N03 error response is returned within SLA', () => pm.expect(pm.response.responseTime).to.be.below(SLA));",
+                  "pm.test('PM-N11 [KNOWN ISSUE] unknown scheme should not be reported as status SUCCESS', () => {",
+                  "  const j = body();",
+                  "  pm.expect(!(pm.response.code === 200 && j && j.status === 'SUCCESS'), 'API returned HTTP ' + pm.response.code + ' with status ' + (j && j.status) + ', scheme_code ' + (j && j.meta && j.meta.scheme_code) + ', records ' + (j && j.data && j.data.length)).to.be.true;",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mf/999999999",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mf",
+                "999999999"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Unknown scheme code (latest)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const SLA = Number(pm.variables.get('sla_ms')) || 3000;",
+                  "const navSeries = j => j.data.filter(r => parseDate(r.date) && Number(r.nav) > 0).map(r => ({ t: parseDate(r.date).getTime(), n: Number(r.nav), d: r.date })).sort((a, b) => a.t - b.t);",
+                  "const spikePositions = s => { const hits = []; for (let i = 1; i < s.length - 1; i++) { const a = s[i].n / s[i - 1].n - 1, b = s[i + 1].n / s[i].n - 1, net = s[i + 1].n / s[i - 1].n - 1; if (Math.abs(a) >= 0.10 && Math.abs(b) >= 0.10 && a * b < 0 && Math.abs(net) <= 0.2 * Math.abs(a)) hits.push(i); } return hits; };",
+                  "const isJson = () => (pm.response.headers.get('Content-Type') || '').toLowerCase().includes('application/json');",
+                  "const body = () => { try { return pm.response.json(); } catch (e) { return null; } };",
+                  "const parseDate = s => {",
+                  "  const m = /^(\\d{2})-(\\d{2})-(\\d{4})$/.exec(s || '');",
+                  "  if (!m) return null;",
+                  "  const d = new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));",
+                  "  return d.getUTCMonth() === (+m[2] - 1) ? d : null;",
+                  "};",
+                  "const isSuccessPayload = () => { const j = body(); return pm.response.code === 200 && j && !Array.isArray(j) && j.status === 'SUCCESS' && Array.isArray(j.data) && j.data.length > 0; };",
+                  "const NAV_RECORD = { type: 'object', required: ['date', 'nav'], properties: { date: { type: 'string', pattern: '^\\\\d{2}-\\\\d{2}-\\\\d{4}$' }, nav: { type: 'string', pattern: '^-?\\\\d+(\\\\.\\\\d+)?$' } } };",
+                  "const SCHEME_SCHEMA = { type: 'object', required: ['meta', 'data', 'status'], properties: {",
+                  "  meta: { type: 'object', required: ['fund_house', 'scheme_code', 'scheme_name'], properties: {",
+                  "    fund_house: { type: 'string', minLength: 1 }, scheme_type: { type: ['string', 'null'] }, scheme_category: { type: ['string', 'null'] },",
+                  "    scheme_code: { type: ['integer', 'string'] }, scheme_name: { type: 'string', minLength: 1 },",
+                  "    isin_growth: { type: ['string', 'null'] }, isin_div_reinvestment: { type: ['string', 'null'] } } },",
+                  "  data: { type: 'array', items: NAV_RECORD }, status: { type: 'string', enum: ['SUCCESS'] } } };",
+                  "const SEARCH_SCHEMA = { type: 'array', items: { type: 'object', required: ['schemeCode', 'schemeName'], properties: { schemeCode: { type: 'integer' }, schemeName: { type: 'string', minLength: 1 } } } };",
+                  "",
+                  "pm.test('PM-N12 [KNOWN ISSUE] unknown scheme /latest should not be reported as status SUCCESS', () => {",
+                  "  const j = body();",
+                  "  pm.expect(!(pm.response.code === 200 && j && j.status === 'SUCCESS'), 'API returned HTTP ' + pm.response.code + ' with status ' + (j && j.status)).to.be.true;",
+                  "});",
+                  "pm.test('PM-N13 unknown scheme /latest does not cause a 5xx error', () => pm.expect(pm.response.code).to.be.below(500));",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mf/999999999/latest",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mf",
+                "999999999",
+                "latest"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Non-numeric scheme code",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const SLA = Number(pm.variables.get('sla_ms')) || 3000;",
+                  "const navSeries = j => j.data.filter(r => parseDate(r.date) && Number(r.nav) > 0).map(r => ({ t: parseDate(r.date).getTime(), n: Number(r.nav), d: r.date })).sort((a, b) => a.t - b.t);",
+                  "const spikePositions = s => { const hits = []; for (let i = 1; i < s.length - 1; i++) { const a = s[i].n / s[i - 1].n - 1, b = s[i + 1].n / s[i].n - 1, net = s[i + 1].n / s[i - 1].n - 1; if (Math.abs(a) >= 0.10 && Math.abs(b) >= 0.10 && a * b < 0 && Math.abs(net) <= 0.2 * Math.abs(a)) hits.push(i); } return hits; };",
+                  "const isJson = () => (pm.response.headers.get('Content-Type') || '').toLowerCase().includes('application/json');",
+                  "const body = () => { try { return pm.response.json(); } catch (e) { return null; } };",
+                  "const parseDate = s => {",
+                  "  const m = /^(\\d{2})-(\\d{2})-(\\d{4})$/.exec(s || '');",
+                  "  if (!m) return null;",
+                  "  const d = new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));",
+                  "  return d.getUTCMonth() === (+m[2] - 1) ? d : null;",
+                  "};",
+                  "const isSuccessPayload = () => { const j = body(); return pm.response.code === 200 && j && !Array.isArray(j) && j.status === 'SUCCESS' && Array.isArray(j.data) && j.data.length > 0; };",
+                  "const NAV_RECORD = { type: 'object', required: ['date', 'nav'], properties: { date: { type: 'string', pattern: '^\\\\d{2}-\\\\d{2}-\\\\d{4}$' }, nav: { type: 'string', pattern: '^-?\\\\d+(\\\\.\\\\d+)?$' } } };",
+                  "const SCHEME_SCHEMA = { type: 'object', required: ['meta', 'data', 'status'], properties: {",
+                  "  meta: { type: 'object', required: ['fund_house', 'scheme_code', 'scheme_name'], properties: {",
+                  "    fund_house: { type: 'string', minLength: 1 }, scheme_type: { type: ['string', 'null'] }, scheme_category: { type: ['string', 'null'] },",
+                  "    scheme_code: { type: ['integer', 'string'] }, scheme_name: { type: 'string', minLength: 1 },",
+                  "    isin_growth: { type: ['string', 'null'] }, isin_div_reinvestment: { type: ['string', 'null'] } } },",
+                  "  data: { type: 'array', items: NAV_RECORD }, status: { type: 'string', enum: ['SUCCESS'] } } };",
+                  "const SEARCH_SCHEMA = { type: 'array', items: { type: 'object', required: ['schemeCode', 'schemeName'], properties: { schemeCode: { type: 'integer' }, schemeName: { type: 'string', minLength: 1 } } } };",
+                  "",
+                  "pm.test('PM-N04 non-numeric scheme is not returned as a success payload', () => pm.expect(isSuccessPayload()).to.be.false);",
+                  "pm.test('PM-N05 non-numeric scheme does not cause a 5xx error', () => pm.expect(pm.response.code).to.be.below(500));",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mf/abc",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mf",
+                "abc"
+              ]
+            }
+          }
+        },
+        {
+          "name": "SQL-injection style search input",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const SLA = Number(pm.variables.get('sla_ms')) || 3000;",
+                  "const navSeries = j => j.data.filter(r => parseDate(r.date) && Number(r.nav) > 0).map(r => ({ t: parseDate(r.date).getTime(), n: Number(r.nav), d: r.date })).sort((a, b) => a.t - b.t);",
+                  "const spikePositions = s => { const hits = []; for (let i = 1; i < s.length - 1; i++) { const a = s[i].n / s[i - 1].n - 1, b = s[i + 1].n / s[i].n - 1, net = s[i + 1].n / s[i - 1].n - 1; if (Math.abs(a) >= 0.10 && Math.abs(b) >= 0.10 && a * b < 0 && Math.abs(net) <= 0.2 * Math.abs(a)) hits.push(i); } return hits; };",
+                  "const isJson = () => (pm.response.headers.get('Content-Type') || '').toLowerCase().includes('application/json');",
+                  "const body = () => { try { return pm.response.json(); } catch (e) { return null; } };",
+                  "const parseDate = s => {",
+                  "  const m = /^(\\d{2})-(\\d{2})-(\\d{4})$/.exec(s || '');",
+                  "  if (!m) return null;",
+                  "  const d = new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));",
+                  "  return d.getUTCMonth() === (+m[2] - 1) ? d : null;",
+                  "};",
+                  "const isSuccessPayload = () => { const j = body(); return pm.response.code === 200 && j && !Array.isArray(j) && j.status === 'SUCCESS' && Array.isArray(j.data) && j.data.length > 0; };",
+                  "const NAV_RECORD = { type: 'object', required: ['date', 'nav'], properties: { date: { type: 'string', pattern: '^\\\\d{2}-\\\\d{2}-\\\\d{4}$' }, nav: { type: 'string', pattern: '^-?\\\\d+(\\\\.\\\\d+)?$' } } };",
+                  "const SCHEME_SCHEMA = { type: 'object', required: ['meta', 'data', 'status'], properties: {",
+                  "  meta: { type: 'object', required: ['fund_house', 'scheme_code', 'scheme_name'], properties: {",
+                  "    fund_house: { type: 'string', minLength: 1 }, scheme_type: { type: ['string', 'null'] }, scheme_category: { type: ['string', 'null'] },",
+                  "    scheme_code: { type: ['integer', 'string'] }, scheme_name: { type: 'string', minLength: 1 },",
+                  "    isin_growth: { type: ['string', 'null'] }, isin_div_reinvestment: { type: ['string', 'null'] } } },",
+                  "  data: { type: 'array', items: NAV_RECORD }, status: { type: 'string', enum: ['SUCCESS'] } } };",
+                  "const SEARCH_SCHEMA = { type: 'array', items: { type: 'object', required: ['schemeCode', 'schemeName'], properties: { schemeCode: { type: 'integer' }, schemeName: { type: 'string', minLength: 1 } } } };",
+                  "",
+                  "pm.test('PM-N06 injection-style input does not cause a 5xx error', () => pm.expect(pm.response.code).to.be.below(500));",
+                  "pm.test('PM-N07 response does not leak SQL or stack-trace details', () => pm.expect(pm.response.text()).to.not.match(/traceback|sql syntax|exception|stack trace|mysql|postgres/i));",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mf/search?q=%27%20OR%201%3D1%20--",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mf",
+                "search"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Script-injection (XSS) style search input",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const SLA = Number(pm.variables.get('sla_ms')) || 3000;",
+                  "const navSeries = j => j.data.filter(r => parseDate(r.date) && Number(r.nav) > 0).map(r => ({ t: parseDate(r.date).getTime(), n: Number(r.nav), d: r.date })).sort((a, b) => a.t - b.t);",
+                  "const spikePositions = s => { const hits = []; for (let i = 1; i < s.length - 1; i++) { const a = s[i].n / s[i - 1].n - 1, b = s[i + 1].n / s[i].n - 1, net = s[i + 1].n / s[i - 1].n - 1; if (Math.abs(a) >= 0.10 && Math.abs(b) >= 0.10 && a * b < 0 && Math.abs(net) <= 0.2 * Math.abs(a)) hits.push(i); } return hits; };",
+                  "const isJson = () => (pm.response.headers.get('Content-Type') || '').toLowerCase().includes('application/json');",
+                  "const body = () => { try { return pm.response.json(); } catch (e) { return null; } };",
+                  "const parseDate = s => {",
+                  "  const m = /^(\\d{2})-(\\d{2})-(\\d{4})$/.exec(s || '');",
+                  "  if (!m) return null;",
+                  "  const d = new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));",
+                  "  return d.getUTCMonth() === (+m[2] - 1) ? d : null;",
+                  "};",
+                  "const isSuccessPayload = () => { const j = body(); return pm.response.code === 200 && j && !Array.isArray(j) && j.status === 'SUCCESS' && Array.isArray(j.data) && j.data.length > 0; };",
+                  "const NAV_RECORD = { type: 'object', required: ['date', 'nav'], properties: { date: { type: 'string', pattern: '^\\\\d{2}-\\\\d{2}-\\\\d{4}$' }, nav: { type: 'string', pattern: '^-?\\\\d+(\\\\.\\\\d+)?$' } } };",
+                  "const SCHEME_SCHEMA = { type: 'object', required: ['meta', 'data', 'status'], properties: {",
+                  "  meta: { type: 'object', required: ['fund_house', 'scheme_code', 'scheme_name'], properties: {",
+                  "    fund_house: { type: 'string', minLength: 1 }, scheme_type: { type: ['string', 'null'] }, scheme_category: { type: ['string', 'null'] },",
+                  "    scheme_code: { type: ['integer', 'string'] }, scheme_name: { type: 'string', minLength: 1 },",
+                  "    isin_growth: { type: ['string', 'null'] }, isin_div_reinvestment: { type: ['string', 'null'] } } },",
+                  "  data: { type: 'array', items: NAV_RECORD }, status: { type: 'string', enum: ['SUCCESS'] } } };",
+                  "const SEARCH_SCHEMA = { type: 'array', items: { type: 'object', required: ['schemeCode', 'schemeName'], properties: { schemeCode: { type: 'integer' }, schemeName: { type: 'string', minLength: 1 } } } };",
+                  "",
+                  "pm.test('PM-N08 script payload is not reflected back in the response', () => pm.expect(pm.response.text().toLowerCase()).to.not.include('<script>'));",
+                  "pm.test('PM-N09 script payload does not cause a 5xx error', () => pm.expect(pm.response.code).to.be.below(500));",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mf/search?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mf",
+                "search"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Search without query parameter",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const SLA = Number(pm.variables.get('sla_ms')) || 3000;",
+                  "const navSeries = j => j.data.filter(r => parseDate(r.date) && Number(r.nav) > 0).map(r => ({ t: parseDate(r.date).getTime(), n: Number(r.nav), d: r.date })).sort((a, b) => a.t - b.t);",
+                  "const spikePositions = s => { const hits = []; for (let i = 1; i < s.length - 1; i++) { const a = s[i].n / s[i - 1].n - 1, b = s[i + 1].n / s[i].n - 1, net = s[i + 1].n / s[i - 1].n - 1; if (Math.abs(a) >= 0.10 && Math.abs(b) >= 0.10 && a * b < 0 && Math.abs(net) <= 0.2 * Math.abs(a)) hits.push(i); } return hits; };",
+                  "const isJson = () => (pm.response.headers.get('Content-Type') || '').toLowerCase().includes('application/json');",
+                  "const body = () => { try { return pm.response.json(); } catch (e) { return null; } };",
+                  "const parseDate = s => {",
+                  "  const m = /^(\\d{2})-(\\d{2})-(\\d{4})$/.exec(s || '');",
+                  "  if (!m) return null;",
+                  "  const d = new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));",
+                  "  return d.getUTCMonth() === (+m[2] - 1) ? d : null;",
+                  "};",
+                  "const isSuccessPayload = () => { const j = body(); return pm.response.code === 200 && j && !Array.isArray(j) && j.status === 'SUCCESS' && Array.isArray(j.data) && j.data.length > 0; };",
+                  "const NAV_RECORD = { type: 'object', required: ['date', 'nav'], properties: { date: { type: 'string', pattern: '^\\\\d{2}-\\\\d{2}-\\\\d{4}$' }, nav: { type: 'string', pattern: '^-?\\\\d+(\\\\.\\\\d+)?$' } } };",
+                  "const SCHEME_SCHEMA = { type: 'object', required: ['meta', 'data', 'status'], properties: {",
+                  "  meta: { type: 'object', required: ['fund_house', 'scheme_code', 'scheme_name'], properties: {",
+                  "    fund_house: { type: 'string', minLength: 1 }, scheme_type: { type: ['string', 'null'] }, scheme_category: { type: ['string', 'null'] },",
+                  "    scheme_code: { type: ['integer', 'string'] }, scheme_name: { type: 'string', minLength: 1 },",
+                  "    isin_growth: { type: ['string', 'null'] }, isin_div_reinvestment: { type: ['string', 'null'] } } },",
+                  "  data: { type: 'array', items: NAV_RECORD }, status: { type: 'string', enum: ['SUCCESS'] } } };",
+                  "const SEARCH_SCHEMA = { type: 'array', items: { type: 'object', required: ['schemeCode', 'schemeName'], properties: { schemeCode: { type: 'integer' }, schemeName: { type: 'string', minLength: 1 } } } };",
+                  "",
+                  "pm.test('PM-N10 missing q does not cause a 5xx error', () => pm.expect(pm.response.code).to.be.below(500));",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mf/search",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "mf",
+                "search"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
