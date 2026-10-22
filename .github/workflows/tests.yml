@@ -1,3 +1,4 @@
+
 name: tests
 
 on:
@@ -22,7 +23,7 @@ jobs:
     if: github.event_name != 'pull_request'
     needs: unit
     runs-on: ubuntu-latest
-    continue-on-error: true   # a public API can have real data defects; review the report instead of blocking
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -34,11 +35,13 @@ jobs:
         with:
           node-version: "20"
       - run: npm install -g newman newman-reporter-htmlextra
-      - run: >
+      - name: Run Newman tests
+        continue-on-error: true
+        run: >
           newman run postman/MFapi_Test_Suite.postman_collection.json
           -e postman/MFapi_Production.postman_environment.json
-          -r cli,htmlextra --reporter-htmlextra-export reports/newman_report.html
-          continue-on-error: true
+          -r cli,htmlextra
+          --reporter-htmlextra-export reports/newman_report.html
       - uses: actions/upload-artifact@v4
         if: always()
         with:
