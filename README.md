@@ -1,4 +1,4 @@
-> Evolved from [v1 (fin-api-validation)](https://github.com/harsh-1817/fin-api-validation), with real defect findings and CI.
+<!-- > Evolved from [v1 (fin-api-validation)](https://github.com/harsh-1817/fin-api-validation), with real defect findings and CI. -->
 
 # Mutual Fund NAV API: Test & Data-Validation Framework
 
